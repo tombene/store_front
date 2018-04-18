@@ -1,4 +1,7 @@
 var mysql = require("mysql");
+var inquirer = require("inquirer");
+
+var availableProductIds = [];
 
 var connection = mysql.createConnection({
 	host: 'localhost',
@@ -14,16 +17,92 @@ connection.connect(error => {
 });
 
 //get all available items
-function selectAvailableProducts(){
+function selectAvailableProducts() {
 	connection.query(
-		"SELECT * from product where ?",
-		{
-			stock_quantity: "> 0"
-		},
-		function(err,res){
-			if(err) throw err;
-			console.log(res);
-			connection.end();
+		"SELECT * from products where stock_quantity > 0",
+
+		function (err, res) {
+			if (err) throw err;
+			availableProductIds = res;
+			console.log(availableProductIds);
 		}
 	)
 }
+
+//get remaining qty
+function getAvailableQty(id) {
+	connection.query(
+		"SELECT stock_quantity from products where ?",
+		{
+			id:id
+		},
+		function (err, res) {
+			if (err) throw err;
+			console.log(res[0].stock_quantity);
+		}
+	)
+}
+
+//update qty
+function updateStockQty(id, newQty) {
+	connection.query(
+		"UPDATE products SET ? WHERE ?",
+		[
+			{
+				stock_quantity: newQty
+			},
+			{
+				id: id
+			}
+		],
+		function (err, res) {
+			if (err) throw err;
+			console.log("Updated stock_qty to " + newQty);
+		}
+	)
+}
+
+var promptSelectProduct = function () {
+	inquirer.prompt([
+		{
+			name: "product",
+			message: "What product would you like to buy? ",
+			validate: function(input){
+				for(let i; i<availableProductIds.length; i++){
+					if(input === availableProductIds[i].id){
+						return true;
+					}
+				}
+				return false;
+			}
+		}
+	]).then(function(res){
+		promptSelectQty(res.product);
+	});
+}
+
+var promptSelectQty = function (id){
+	let maxQty = getAvailableQty(id);
+	inquirer.prompt([
+		{
+			name: "qty",
+			message: "How many would you like to purchase?",
+			validate: function(input){
+				if(isNaN(input)){
+					if(input > 0 && input < maxQty){
+						return true;
+					}
+				}
+				return false;
+			}
+		}
+	]).then(function(res){
+		updateStockQty()
+	});
+}
+
+selectAvailableProducts();
+getAvailableQty(2);
+updateStockQty(2, 20);
+selectAvailableProducts();
+connection.end();
