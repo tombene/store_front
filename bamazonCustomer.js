@@ -1,8 +1,6 @@
 var mysql = require("mysql");
 var inquirer = require("inquirer");
 
-var availableProductIds = [];
-
 var connection = mysql.createConnection({
 	host: 'localhost',
 	user: 'root',
@@ -17,20 +15,21 @@ connection.connect(error => {
 });
 
 //get all available items
-function selectAvailableProducts() {
+function selectAvailableProducts(callBack) {
 	connection.query(
 		"SELECT * from products where stock_quantity > 0",
 
 		function (err, res) {
 			if (err) throw err;
-			availableProductIds = res;
-			console.log(availableProductIds);
+			// availableProductIds = res;
+			// console.log(res);
+			callBack(res);
 		}
 	)
 }
 
 //get remaining qty
-function getAvailableQty(id) {
+function getAvailableQty(id,callBack) {
 	connection.query(
 		"SELECT stock_quantity from products where ?",
 		{
@@ -38,7 +37,8 @@ function getAvailableQty(id) {
 		},
 		function (err, res) {
 			if (err) throw err;
-			console.log(res[0].stock_quantity);
+			// console.log(res[0].stock_quantity);
+			callBack(res[0].stock_quantity);
 		}
 	)
 }
@@ -57,52 +57,73 @@ function updateStockQty(id, newQty) {
 		],
 		function (err, res) {
 			if (err) throw err;
-			console.log("Updated stock_qty to " + newQty);
+			console.log("Thank You For Your Purchase");
+			console.log("Stock Quantity Remaining = " + newQty);
 		}
 	)
 }
 
 var promptSelectProduct = function () {
-	inquirer.prompt([
-		{
-			name: "product",
-			message: "What product would you like to buy? ",
-			validate: function(input){
-				for(let i; i<availableProductIds.length; i++){
-					if(input === availableProductIds[i].id){
+	selectAvailableProducts(function(availableProducts){
+		var selectList = [];
+		for(let i = 0; i < availableProducts.length; i++){
+			selectList.push(availableProducts[i].id + ": " + availableProducts[i].product_name + " Quantity: " + availableProducts[i].stock_quantity);
+		}
+		console.log(selectList);
+		inquirer.prompt([
+			{
+				name: "product",
+				message: "What product would you like to buy? ",
+				// choices: selectList,
+				validate: function(input){
+					for(let i = 0; i<availableProducts.length; i++){
+						if(parseInt(input,10) === availableProducts[i].id){
+							return true;
+						}
+					}
+					return false;
+				}
+			}
+		]).then(function(res){
+			promptSelectQty(res.product);
+		});
+	});
+	
+}
+
+function promptSelectQty(id){
+	getAvailableQty(id,function(maxQty){
+		inquirer.prompt([
+			{
+				name: "qty",
+				message: "How many would you like to purchase?",
+				validate: function(input){
+					if(isNaN(input)){
+						return false;
+					}
+					var inputNum = parseInt(input,10);
+					if(inputNum > 0 && inputNum <= maxQty){
 						return true;
 					}
+					return false;
 				}
-				return false;
 			}
-		}
-	]).then(function(res){
-		promptSelectQty(res.product);
+		]).then(function(res){
+			updateStockQty(id,maxQty - res.qty);
+			closeConnection();
+		});
 	});
 }
 
-var promptSelectQty = function (id){
-	let maxQty = getAvailableQty(id);
-	inquirer.prompt([
-		{
-			name: "qty",
-			message: "How many would you like to purchase?",
-			validate: function(input){
-				if(isNaN(input)){
-					if(input > 0 && input < maxQty){
-						return true;
-					}
-				}
-				return false;
-			}
-		}
-	]).then(function(res){
-		updateStockQty()
-	});
-}
+// function promptContinue(){
+// 	inquirer.prompt()
+// }
 
-selectAvailableProducts();
-getAvailableQty(2);
-updateStockQty(2, 20);
-selectAvailableProducts();
-connection.end();
+function closeConnection(){
+	connection.end();
+}
+promptSelectProduct();
+// selectAvailableProducts();
+// getAvailableQty(2);
+// updateStockQty(2, 20);
+// selectAvailableProducts();
